@@ -18,6 +18,8 @@
 (define-constant ERR-MIN-STAKE-REQUIRED (err u106))
 (define-constant ERR-LOAN-ACTIVE (err u107))
 (define-constant ERR-REPAYMENT-FAILED (err u108))
+(define-constant ERR-INSUFFICIENT-CONTRIBUTIONS (err u109))
+(define-constant ERR-WITHDRAWAL-LIMIT-EXCEEDED (err u110))
 
 (define-data-var minimum-stake uint u1000)
 (define-data-var proposal-duration uint u144)
@@ -32,6 +34,9 @@
         reputation-score: uint,
         active-loan: uint,
         total-repaid: uint,
+        contributions-balance: uint,
+        total-contributions: uint,
+        last-withdrawal-timestamp: uint,
     }
 )
 
@@ -83,6 +88,13 @@
             reputation-score: (default-to u0 (get reputation-score (map-get? members tx-sender))),
             active-loan: u0,
             total-repaid: (default-to u0 (get total-repaid (map-get? members tx-sender))),
+            contributions-balance: (default-to u0
+                (get contributions-balance (map-get? members tx-sender))
+            ),
+            total-contributions: (default-to u0 (get total-contributions (map-get? members tx-sender))),
+            last-withdrawal-timestamp: (default-to u0
+                (get last-withdrawal-timestamp (map-get? members tx-sender))
+            ),
         })
         (var-set total-staked (+ (var-get total-staked) amount))
         (ok true)
@@ -191,6 +203,69 @@
 
 (define-read-only (get-proposal (proposal-id uint))
     (ok (unwrap! (map-get? proposals proposal-id) ERR-PROPOSAL-NOT-FOUND))
+)
+
+(define-public (make-contribution
+        (token <ft-trait>)
+        (amount uint)
+    )
+    (let (
+            (current-balance (unwrap! (contract-call? token get-balance tx-sender)
+                ERR-INSUFFICIENT-BALANCE
+            ))
+            (member-data (default-to {
+                staked-amount: u0,
+                last-stake-timestamp: u0,
+                reputation-score: u0,
+                active-loan: u0,
+                total-repaid: u0,
+                contributions-balance: u0,
+                total-contributions: u0,
+                last-withdrawal-timestamp: u0,
+            }
+                (map-get? members tx-sender)
+            ))
+        )
+        (asserts! (>= current-balance amount) ERR-INSUFFICIENT-BALANCE)
+        (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+        (try! (contract-call? token transfer amount tx-sender (as-contract tx-sender)
+            none
+        ))
+        (map-set members tx-sender
+            (merge member-data {
+                contributions-balance: (+ (get contributions-balance member-data) amount),
+                total-contributions: (+ (get total-contributions member-data) amount),
+                reputation-score: (+ (get reputation-score member-data) u1),
+            })
+        )
+        (var-set treasury-balance (+ (var-get treasury-balance) amount))
+        (ok true)
+    )
+)
+
+(define-public (withdraw-contribution
+        (token <ft-trait>)
+        (amount uint)
+    )
+    (let (
+            (member-data (unwrap! (map-get? members tx-sender) ERR-NOT-AUTHORIZED))
+            (withdrawal-limit (/ (get contributions-balance member-data) u2))
+        )
+        (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+        (asserts! (>= (get contributions-balance member-data) amount)
+            ERR-INSUFFICIENT-CONTRIBUTIONS
+        )
+        (asserts! (<= amount withdrawal-limit) ERR-WITHDRAWAL-LIMIT-EXCEEDED)
+        (try! (as-contract (contract-call? token transfer amount tx-sender tx-sender none)))
+        (map-set members tx-sender
+            (merge member-data {
+                contributions-balance: (- (get contributions-balance member-data) amount),
+                last-withdrawal-timestamp: burn-block-height,
+            })
+        )
+        (var-set treasury-balance (- (var-get treasury-balance) amount))
+        (ok true)
+    )
 )
 
 (define-read-only (get-member-data (member principal))
