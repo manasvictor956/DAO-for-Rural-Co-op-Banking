@@ -20,6 +20,8 @@
 (define-constant ERR-REPAYMENT-FAILED (err u108))
 (define-constant ERR-INSUFFICIENT-CONTRIBUTIONS (err u109))
 (define-constant ERR-WITHDRAWAL-LIMIT-EXCEEDED (err u110))
+(define-constant ERR-CANNOT-DELEGATE-TO-SELF (err u111))
+(define-constant ERR-DELEGATE-NOT-MEMBER (err u112))
 
 (define-data-var minimum-stake uint u1000)
 (define-data-var proposal-duration uint u144)
@@ -64,6 +66,11 @@
 (define-map loan-repayments
     { proposal-id: uint }
     uint
+)
+
+(define-map delegations
+    principal
+    principal
 )
 
 (define-data-var proposal-count uint u0)
@@ -270,4 +277,72 @@
 
 (define-read-only (get-member-data (member principal))
     (ok (unwrap! (map-get? members member) ERR-NOT-AUTHORIZED))
+)
+
+(define-public (delegate-voting-power (delegate principal))
+    (let (
+            (delegator-data (unwrap! (map-get? members tx-sender) ERR-NOT-AUTHORIZED))
+            (delegate-data (unwrap! (map-get? members delegate) ERR-DELEGATE-NOT-MEMBER))
+        )
+        (asserts! (not (is-eq tx-sender delegate)) ERR-CANNOT-DELEGATE-TO-SELF)
+        (map-set delegations tx-sender delegate)
+        (ok true)
+    )
+)
+
+(define-public (revoke-delegation)
+    (let ((delegator-data (unwrap! (map-get? members tx-sender) ERR-NOT-AUTHORIZED)))
+        (map-delete delegations tx-sender)
+        (ok true)
+    )
+)
+
+(define-public (vote-as-delegate
+        (proposal-id uint)
+        (vote-bool bool)
+        (delegator principal)
+    )
+    (let (
+            (proposal (unwrap! (map-get? proposals proposal-id) ERR-PROPOSAL-NOT-FOUND))
+            (delegate-data (unwrap! (map-get? members tx-sender) ERR-NOT-AUTHORIZED))
+            (delegator-data (unwrap! (map-get? members delegator) ERR-NOT-AUTHORIZED))
+            (delegation (unwrap! (map-get? delegations delegator) ERR-NOT-AUTHORIZED))
+        )
+        (asserts! (is-eq tx-sender delegation) ERR-NOT-AUTHORIZED)
+        (asserts!
+            (not (default-to false
+                (map-get? votes {
+                    proposal-id: proposal-id,
+                    voter: delegator,
+                })
+            ))
+            ERR-ALREADY-VOTED
+        )
+        (asserts! (< burn-block-height (get end-burn-block-height proposal))
+            ERR-PROPOSAL-EXPIRED
+        )
+        (map-set votes {
+            proposal-id: proposal-id,
+            voter: delegator,
+        }
+            vote-bool
+        )
+        (map-set proposals proposal-id
+            (merge proposal {
+                yes-votes: (if vote-bool
+                    (+ (get yes-votes proposal) u1)
+                    (get yes-votes proposal)
+                ),
+                no-votes: (if (not vote-bool)
+                    (+ (get no-votes proposal) u1)
+                    (get no-votes proposal)
+                ),
+            })
+        )
+        (ok true)
+    )
+)
+
+(define-read-only (get-delegation (delegator principal))
+    (ok (map-get? delegations delegator))
 )
