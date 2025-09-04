@@ -22,11 +22,15 @@
 (define-constant ERR-WITHDRAWAL-LIMIT-EXCEEDED (err u110))
 (define-constant ERR-CANNOT-DELEGATE-TO-SELF (err u111))
 (define-constant ERR-DELEGATE-NOT-MEMBER (err u112))
+(define-constant ERR-INTEREST-CALCULATION-FAILED (err u113))
 
 (define-data-var minimum-stake uint u1000)
 (define-data-var proposal-duration uint u144)
 (define-data-var total-staked uint u0)
 (define-data-var treasury-balance uint u0)
+(define-data-var base-interest-rate uint u500)
+(define-data-var max-interest-rate uint u2000)
+(define-data-var reputation-threshold uint u10)
 
 (define-map members
     principal
@@ -53,6 +57,8 @@
         status: (string-ascii 20),
         end-burn-block-height: uint,
         repayment-deadline: uint,
+        interest-rate: uint,
+        total-interest-due: uint,
     }
 )
 
@@ -74,6 +80,55 @@
 )
 
 (define-data-var proposal-count uint u0)
+
+(define-read-only (calculate-interest-rate (borrower principal))
+    (let (
+            (member-data (default-to {
+                staked-amount: u0,
+                last-stake-timestamp: u0,
+                reputation-score: u0,
+                active-loan: u0,
+                total-repaid: u0,
+                contributions-balance: u0,
+                total-contributions: u0,
+                last-withdrawal-timestamp: u0,
+            }
+                (map-get? members borrower)
+            ))
+            (reputation (get reputation-score member-data))
+            (stake-ratio (if (> (var-get total-staked) u0)
+                (/ (* (get staked-amount member-data) u10000)
+                    (var-get total-staked)
+                )
+                u0
+            ))
+        )
+        (ok (if (>= reputation (var-get reputation-threshold))
+            (if (> stake-ratio u500)
+                (var-get base-interest-rate)
+                (+ (var-get base-interest-rate) u250)
+            )
+            (if (> stake-ratio u1000)
+                (+ (var-get base-interest-rate) u500)
+                (var-get max-interest-rate)
+            )
+        ))
+    )
+)
+
+(define-read-only (calculate-interest-amount
+        (principal-amount uint)
+        (interest-rate uint)
+        (duration-blocks uint)
+    )
+    (let (
+            (annual-blocks u52560)
+            (interest-per-block (/ interest-rate annual-blocks))
+            (total-interest (/ (* principal-amount interest-per-block duration-blocks) u10000))
+        )
+        (ok total-interest)
+    )
+)
 
 (define-public (stake-tokens
         (token <ft-trait>)
@@ -116,6 +171,13 @@
     (let (
             (member-data (unwrap! (map-get? members tx-sender) ERR-NOT-AUTHORIZED))
             (proposal-id (+ (var-get proposal-count) u1))
+            (interest-rate (unwrap! (calculate-interest-rate tx-sender)
+                ERR-INTEREST-CALCULATION-FAILED
+            ))
+            (total-interest (unwrap!
+                (calculate-interest-amount amount interest-rate repayment-period)
+                ERR-INTEREST-CALCULATION-FAILED
+            ))
         )
         (asserts! (>= (get staked-amount member-data) (var-get minimum-stake))
             ERR-MIN-STAKE-REQUIRED
@@ -130,6 +192,8 @@
             status: "active",
             end-burn-block-height: (+ burn-block-height (var-get proposal-duration)),
             repayment-deadline: (+ burn-block-height repayment-period),
+            interest-rate: interest-rate,
+            total-interest-due: total-interest,
         })
         (var-set proposal-count proposal-id)
         (ok proposal-id)
@@ -345,4 +409,53 @@
 
 (define-read-only (get-delegation (delegator principal))
     (ok (map-get? delegations delegator))
+)
+
+(define-public (repay-with-interest
+        (token <ft-trait>)
+        (proposal-id uint)
+        (principal-amount uint)
+        (interest-amount uint)
+    )
+    (let (
+            (proposal (unwrap! (map-get? proposals proposal-id) ERR-PROPOSAL-NOT-FOUND))
+            (member-data (unwrap! (map-get? members tx-sender) ERR-NOT-AUTHORIZED))
+            (total-payment (+ principal-amount interest-amount))
+            (expected-interest (get total-interest-due proposal))
+        )
+        (asserts! (is-eq tx-sender (get proposer proposal)) ERR-NOT-AUTHORIZED)
+        (asserts! (>= interest-amount expected-interest) ERR-INSUFFICIENT-BALANCE)
+        (try! (contract-call? token transfer total-payment tx-sender
+            (as-contract tx-sender) none
+        ))
+        (map-set loan-repayments { proposal-id: proposal-id }
+            (+
+                (default-to u0
+                    (map-get? loan-repayments { proposal-id: proposal-id })
+                )
+                total-payment
+            ))
+        (map-set members tx-sender
+            (merge member-data {
+                total-repaid: (+ (get total-repaid member-data) total-payment),
+                reputation-score: (+ (get reputation-score member-data) u2),
+                active-loan: u0,
+            })
+        )
+        (var-set treasury-balance (+ (var-get treasury-balance) interest-amount))
+        (ok true)
+    )
+)
+
+(define-read-only (get-loan-details (proposal-id uint))
+    (match (map-get? proposals proposal-id)
+        proposal (ok {
+            loan-amount: (get loan-amount proposal),
+            interest-rate: (get interest-rate proposal),
+            total-interest-due: (get total-interest-due proposal),
+            total-repayment-due: (+ (get loan-amount proposal) (get total-interest-due proposal)),
+            repayment-deadline: (get repayment-deadline proposal),
+        })
+        ERR-PROPOSAL-NOT-FOUND
+    )
 )
