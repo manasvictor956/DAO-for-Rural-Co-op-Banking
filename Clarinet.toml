@@ -1,0 +1,25 @@
+[project]
+name = 'dao-rural-banking'
+description = 'Decentralized Autonomous Organization for Rural Cooperative Banking'
+authors = ['manasvictor956']
+telemetry = true
+cache_dir = '.cache'
+requirements = []
+
+[contracts.dao-rural-banking]
+path = 'contracts/dao-rural-banking.clar'
+clarity_version = 3
+epoch = 3.1
+
+[repl.analysis]
+passes = ['check_checker']
+
+[repl.analysis.check_checker]
+strict = false
+trusted_sender = false
+trusted_caller = false
+callee_filter = false
+
+[repl.remote_data]
+enabled = false
+api_url = 'https://api.hiro.so'
