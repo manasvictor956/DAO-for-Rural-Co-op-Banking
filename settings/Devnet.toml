@@ -1,0 +1,40 @@
+[network]
+name = "devnet"
+stacks_node_rpc_address = "http://localhost:20443"
+stacks_node_p2p_address = "http://localhost:20444"
+bitcoin_node_rpc_address = "http://localhost:18443"
+bitcoin_node_rpc_username = "devnet"
+bitcoin_node_rpc_password = "devnet"
+bitcoin_node_p2p_address = "http://localhost:18444"
+bitcoin_block_time_ms = 30000
+
+[accounts.deployer]
+mnemonic = "twice kind fence tip hidden tilt action fragile skin nothing glory cousin green tomorrow spring wrist shed math olympic multiply hip blue scout claw"
+balance = 100000000000000
+# Secret key: 753b7cc01a1a2e86221266a154af739463fce51219d97e4f856cd7200c3bd2a601
+# Address: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+# BTC Address: mqVnk6NPRdhntvfm4hh9vvjiRkFDUuSYsH
+
+[accounts.wallet_1]
+mnemonic = "sell invite acquire kitten bamboo drastic jelly vivid peace spawn twice guilt pave pen trash pretty park cube fragile unaware remain midnight betray rebuild"
+balance = 100000000000000
+# Secret key: 7287ba251d44a4d3fd9276c88ce34c5c52a038955511cccaf77e61068649c17801
+# Address: ST1SJ3DTE5DN7X54YDH5D64R3BCB6A2AG2ZQ8YPD5
+# BTC Address: mr1iPkD9N3RJZZxXRk7xF9d36gffa6exNC
+
+[accounts.wallet_2]
+mnemonic = "hold excess usual excess ring elephant install account glad dry fragile donkey gaze humble truck breeze nation gasp vacuum limb head keep delay hospital"
+balance = 100000000000000
+# Secret key: 530d9f61984c888536871c6573073bdfc0058896dc1adfe9a6a10dfb9283a31b01
+# Address: ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
+# BTC Address: muYdXKmX9bByAueDe6KFfHd5Ff1gdN9ErG
+
+[accounts.wallet_3]
+mnemonic = "cycle puppy glare enroll cost improve round trend wrist mushroom scorpion tower claim oppose clever elephant dinosaur eight problem before frozen dune wagon high"
+balance = 100000000000000
+# Secret key: d655b2523bcd65e34889725c73064feb17ceb796831c0e111ba1a552b0f31b3901
+# Address: ST2JHG361ZXG51QTQAVC1E5B2Tb1FWUWFP03YSHNS
+# BTC Address: mvZtbibDAAA3WLpY7zXXFqRa3T4XSknBX7
+
+[devnet]
+stacks_node_events_observers = ["localhost:8002"]
