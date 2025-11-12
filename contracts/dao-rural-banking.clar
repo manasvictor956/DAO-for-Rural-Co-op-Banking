@@ -48,9 +48,9 @@
 (define-data-var reputation-threshold uint u10)
 
 ;; Savings system configuration
-(define-data-var savings-interest-rate uint u300)  ;; 3% annual interest
+(define-data-var savings-interest-rate uint u300) ;; 3% annual interest
 (define-data-var minimum-savings-deposit uint u100)
-(define-data-var goal-bonus-rate uint u50)         ;; 0.5% bonus for achieving goals
+(define-data-var goal-bonus-rate uint u50) ;; 0.5% bonus for achieving goals
 
 ;; ===========================================
 ;; DATA MAPS
@@ -285,9 +285,7 @@
 
 ;; Create a new savings account
 (define-public (create-savings-account)
-    (let (
-            (existing-account (map-get? savings-accounts tx-sender))
-        )
+    (let ((existing-account (map-get? savings-accounts tx-sender)))
         (asserts! (is-none existing-account) ERR-SAVINGS-ACCOUNT-EXISTS)
         (map-set savings-accounts tx-sender {
             balance: u0,
@@ -309,14 +307,22 @@
         (amount uint)
     )
     (let (
-            (account-data (unwrap! (map-get? savings-accounts tx-sender) ERR-SAVINGS-ACCOUNT-NOT-FOUND))
-            (current-balance (unwrap! (contract-call? token get-balance tx-sender) ERR-INSUFFICIENT-BALANCE))
+            (account-data (unwrap! (map-get? savings-accounts tx-sender)
+                ERR-SAVINGS-ACCOUNT-NOT-FOUND
+            ))
+            (current-balance (unwrap! (contract-call? token get-balance tx-sender)
+                ERR-INSUFFICIENT-BALANCE
+            ))
         )
         (asserts! (>= current-balance amount) ERR-INSUFFICIENT-BALANCE)
-        (asserts! (>= amount (var-get minimum-savings-deposit)) ERR-MINIMUM-DEPOSIT-NOT-MET)
+        (asserts! (>= amount (var-get minimum-savings-deposit))
+            ERR-MINIMUM-DEPOSIT-NOT-MET
+        )
         (asserts! (> amount u0) ERR-INVALID-AMOUNT)
-        
-        (try! (contract-call? token transfer amount tx-sender (as-contract tx-sender) none))
+
+        (try! (contract-call? token transfer amount tx-sender (as-contract tx-sender)
+            none
+        ))
         (map-set savings-accounts tx-sender
             (merge account-data {
                 balance: (+ (get balance account-data) amount),
@@ -333,12 +339,16 @@
         (token <ft-trait>)
         (amount uint)
     )
-    (let (
-            (account-data (unwrap! (map-get? savings-accounts tx-sender) ERR-SAVINGS-ACCOUNT-NOT-FOUND))
-        )
+    (let ((account-data (unwrap! (map-get? savings-accounts tx-sender)
+            ERR-SAVINGS-ACCOUNT-NOT-FOUND
+        )))
         (asserts! (> amount u0) ERR-INVALID-AMOUNT)
-        (asserts! (< burn-block-height (get lock-until-block account-data)) ERR-WITHDRAWAL-LOCKED)
-        (asserts! (>= (get balance account-data) amount) ERR-INSUFFICIENT-SAVINGS-BALANCE)
+        (asserts! (< burn-block-height (get lock-until-block account-data))
+            ERR-WITHDRAWAL-LOCKED
+        )
+        (asserts! (>= (get balance account-data) amount)
+            ERR-INSUFFICIENT-SAVINGS-BALANCE
+        )
         (try! (as-contract (contract-call? token transfer amount tx-sender tx-sender none)))
         (map-set savings-accounts tx-sender
             (merge account-data {
@@ -356,12 +366,12 @@
         (description (string-ascii 256))
         (target-date uint)
     )
-    (let (
-            (account-data (unwrap! (map-get? savings-accounts tx-sender) ERR-SAVINGS-ACCOUNT-NOT-FOUND))
-        )
+    (let ((account-data (unwrap! (map-get? savings-accounts tx-sender)
+            ERR-SAVINGS-ACCOUNT-NOT-FOUND
+        )))
         (asserts! (> target-amount u0) ERR-INVALID-SAVINGS-GOAL)
         (asserts! (> target-date burn-block-height) ERR-INVALID-SAVINGS-GOAL)
-        
+
         (map-set savings-goals tx-sender {
             target-amount: target-amount,
             current-progress: (get balance account-data),
@@ -379,12 +389,12 @@
         (auto-amount uint)
         (frequency-blocks uint)
     )
-    (let (
-            (account-data (unwrap! (map-get? savings-accounts tx-sender) ERR-SAVINGS-ACCOUNT-NOT-FOUND))
-        )
+    (let ((account-data (unwrap! (map-get? savings-accounts tx-sender)
+            ERR-SAVINGS-ACCOUNT-NOT-FOUND
+        )))
         (asserts! (> auto-amount u0) ERR-INVALID-AMOUNT)
         (asserts! (> frequency-blocks u0) ERR-INVALID-AMOUNT)
-        
+
         (map-set auto-savings-settings tx-sender {
             auto-amount: auto-amount,
             frequency-blocks: frequency-blocks,
@@ -397,13 +407,11 @@
 
 ;; Lock savings account for a period (useful for commitment savings)
 (define-public (lock-savings-account (lock-blocks uint))
-    (let (
-            (account-data (unwrap! (map-get? savings-accounts tx-sender) ERR-SAVINGS-ACCOUNT-NOT-FOUND))
-        )
+    (let ((account-data (unwrap! (map-get? savings-accounts tx-sender)
+            ERR-SAVINGS-ACCOUNT-NOT-FOUND
+        )))
         (map-set savings-accounts tx-sender
-            (merge account-data {
-                lock-until-block: (+ burn-block-height lock-blocks),
-            })
+            (merge account-data { lock-until-block: (+ burn-block-height lock-blocks) })
         )
         (ok true)
     )
@@ -443,15 +451,15 @@
         (account-owner principal)
         (blocks-ahead uint)
     )
-    (let (
-            (account-opt (map-get? savings-accounts account-owner))
-        )
+    (let ((account-opt (map-get? savings-accounts account-owner)))
         (if (is-some account-opt)
             (let (
                     (account (unwrap-panic account-opt))
                     (annual-blocks u52560)
                     (interest-rate (var-get savings-interest-rate))
-                    (potential-interest (/ (* (get balance account) interest-rate blocks-ahead) (* annual-blocks u10000)))
+                    (potential-interest (/ (* (get balance account) interest-rate blocks-ahead)
+                        (* annual-blocks u10000)
+                    ))
                 )
                 (ok potential-interest)
             )
@@ -462,9 +470,7 @@
 
 ;; Get comprehensive savings summary
 (define-read-only (get-savings-summary (account-owner principal))
-    (let (
-            (account-opt (map-get? savings-accounts account-owner))
-        )
+    (let ((account-opt (map-get? savings-accounts account-owner)))
         (if (is-some account-opt)
             (let (
                     (account (unwrap-panic account-opt))
@@ -480,5 +486,59 @@
             )
             ERR-SAVINGS-ACCOUNT-NOT-FOUND
         )
+    )
+)
+
+(define-data-var drbc-paused bool false)
+(define-data-var drbc-guardian (optional principal) none)
+
+(define-read-only (drbc-get-paused)
+    (var-get drbc-paused)
+)
+
+(define-read-only (drbc-get-guardian)
+    (var-get drbc-guardian)
+)
+
+(define-private (drbc-ensure-active)
+    (if (var-get drbc-paused)
+        (err u100)
+        (ok true)
+    )
+)
+
+(define-public (drbc-init-guardian)
+    (match (var-get drbc-guardian)
+        g (err u409)
+        (begin
+            (var-set drbc-guardian (some tx-sender))
+            (ok tx-sender)
+        )
+    )
+)
+
+(define-public (drbc-set-guardian (new-guardian principal))
+    (match (var-get drbc-guardian)
+        g (if (is-eq tx-sender g)
+            (begin
+                (var-set drbc-guardian (some new-guardian))
+                (ok new-guardian)
+            )
+            (err u403)
+        )
+        (err u401)
+    )
+)
+
+(define-public (drbc-set-paused (flag bool))
+    (match (var-get drbc-guardian)
+        g (if (is-eq tx-sender g)
+            (begin
+                (var-set drbc-paused flag)
+                (ok flag)
+            )
+            (err u403)
+        )
+        (err u401)
     )
 )
